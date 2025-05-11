@@ -1,20 +1,20 @@
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <format>
 #include <iostream>
 #include <string>
-#include <array>
 #include <vector>
-#include <format>
-#include <cmath>
 
 struct Filter {
     int stops;
     std::string name;
 
-    auto operator<=>(const Filter& other) const {
+    auto constexpr operator<=>(const Filter& other) const {
         return stops <=> other.stops;
     }
 
-    Filter operator+(const Filter& other) const {
+    Filter constexpr operator+(const Filter& other) const {
         return {
             .stops = this->stops + other.stops,
             .name = this->name + " " + other.name
@@ -29,11 +29,11 @@ struct Filter {
 struct Shutter {
     double time;
 
-    explicit Shutter(const int initFraction) {
+    explicit constexpr Shutter(const int initFraction) {
         time = 1.0 / initFraction;
     }
 
-    explicit Shutter(const int initSeconds, const int initHundredsMiliseconds) {
+    explicit constexpr Shutter(const int initSeconds, const int initHundredsMiliseconds) {
         time  = initSeconds + initHundredsMiliseconds / 10.0;
     }
 
@@ -85,18 +85,18 @@ private:
 };
 
 // My personal selection of ND filters
-std::array<Filter ,4> filters = {{
-    {10, "1k"},  // ND1000 = 10 stops
-    {6,  "64"},  // ND64 = 6 stops
-    {3,  "8"},   // ND8 = 3 stops
-    {2,  "4"},   // ND4 = 2 stops
+constexpr std::array<Filter, 4> filters = {{
+    {10, "1k"}, // ND1000 = 10 stops
+    {6,  "64"}, // ND64   = 6 stops
+    {3,  "8"},  // ND8    = 3 stops
+    {2,  "4"},  // ND4    = 2 stops
 }};
 
-std::vector<Filter> combined;
+std::vector<Filter> combinedFilters;
 
 // Shutter speeds supported by my Canon 90D but commented some extreme values I will not need
-std::vector<Shutter> shutters = {
-    // Fraction-based shutter speeds (e.g., 1/8000 second)
+constexpr std::array<Shutter, 52> shutters = { {
+    // Fraction-based shutter speeds, for example: 800 = 1/8000s
     // Shutter(8000),
     // Shutter(6400),
     // Shutter(5000),
@@ -132,7 +132,7 @@ std::vector<Shutter> shutters = {
     Shutter(5), // 1/5 => 0.200s
     Shutter(4), // 1/4 => 0.250s
 
-    // Decimal second based shutter speeds 0"3 = 0.3s
+    // Decimal second based shutter speeds, for example 3"2 = 3.2s
     Shutter(0, 3),   //  0.3s
     Shutter(0, 4),   //  0.4s
     Shutter(0, 5),   //  0.5s
@@ -154,55 +154,73 @@ std::vector<Shutter> shutters = {
     Shutter(20, 0),  // 20.0s
     Shutter(25, 0),  // 25.0s
     Shutter(30, 0),  // 30.0s
-};
+} };
 
 void populateFiltersWithHandPickedCombinations() {
+    static_assert(filters.size() >= 4, "The hand picked combinations expect to have at least 4 filters");
+
     // ND1k ND64 ND4
-    combined.push_back(filters[0] + filters[1]  + filters[3]);
+    static_assert(
+        filters[0].name == "1k" &&
+        filters[1].name == "64" &&
+        filters[3].name == "4",
+        "Expecting ND1000, ND64, ND4 in very specific place/order in the filter array");
+
+    combinedFilters.push_back(filters[0] + filters[1]  + filters[3]);
 
     // ND1k ND8 ND4
-    combined.push_back(filters[0] + filters[2]  + filters[3]);
+    static_assert(
+        filters[0].name == "1k" &&
+        filters[2].name == "8" &&
+        filters[3].name == "4",
+        "Expecting ND1000, ND8, ND4 in very specific place/order in the filter array");
+
+    combinedFilters.push_back(filters[0] + filters[2]  + filters[3]);
 }
 
 void populateFiltersWithGeneratedCombinations() {
     // Only one Filter used
-    for (int i=0; i<4; i++) {
-        combined.push_back(filters[i]);
+    static_assert(!filters.empty(), "At least 1 filter needed to populate these combined filters");
+    for (auto const &filter:filters) {
+        combinedFilters.push_back(filter);
     }
 
     // Two filter stack used
+    static_assert(filters.size() >= 2, "At least 2 filter needed to populate these combined filters");
     for (int i=0; i<(4-1); i++) {
         for (int j=i+1; j<4; j++) {
-            combined.push_back(filters[i] + filters[j]);
+            combinedFilters.push_back(filters[i] + filters[j]);
         }
     }
 
     // // Three filter stack used
+    // static_assert(filters.size() >= 3, "At least 3 filter needed to populate these combined filters");
     // for (int i=0; i<(4-2); i++) {
     //     for (int j=i+1; j<(4-1); j++) {
     //         for (int k=j+1; k<4; k++) {
-    //             combined.push_back(filters[i] + filters[j]  + filters[k]);
+    //             combinedFilters.push_back(filters[i] + filters[j]  + filters[k]);
     //         }
     //     }
     // }
 
     // // Four filters used
-    // combined.push_back(filters[0] + filters[1]  + filters[2] + filters[3]);
+    // static_assert(filters.size() == 4, "Exactly 4 filter needed to populate these combined filters");
+    // combinedFilters.push_back(filters[0] + filters[1]  + filters[2] + filters[3]);
 }
 
 void sortFilters() {
-    std::sort(combined.begin(), combined.end());
+    std::sort(combinedFilters.begin(), combinedFilters.end());
 }
 
 void displayMarkdownTableHeader() {
     std::cout << "| no ND   | ";
-    for (const auto &filter: combined) {
+    for (const auto &filter: combinedFilters) {
         std::cout << filter.toString() << " | ";
     }
     std::cout << std::endl;
 
     std::cout << "| ------- | ";
-    for (int i=0; i<combined.size(); i++) {
+    for (int i=0; i<combinedFilters.size(); i++) {
         std::cout << "------- | ";
     }
     std::cout << std::endl;
@@ -215,7 +233,7 @@ void displayMarkdownTable() {
         std::cout << "| " << shutter.toString() << " | ";
 
         // For each shutter speed show all filter combinations
-        for (const auto &[stops, _]: combined) {
+        for (const auto &[stops, _]: combinedFilters) {
             std::cout << shutter.toStringWithFilterStops(stops) << " | ";
         }
 
@@ -227,7 +245,7 @@ void displayCsvHeader() {
     std::cout << std::endl;
 
     std::cout << "  no ND";
-    for (const auto &filter: combined) {
+    for (const auto &filter: combinedFilters) {
         std::cout  << ",  " << filter.toString();
     }
     std::cout << std::endl;
@@ -237,7 +255,7 @@ void displayCsvRow(const Shutter shutter) {
     std::cout << shutter.toString();
 
     // For a specific shutter speed, show all filter combinations
-    for (const auto &[stops, _]: combined) {
+    for (const auto &[stops, _]: combinedFilters) {
         std::cout << ",  " << shutter.toStringWithFilterStops(stops);
     }
 
@@ -245,8 +263,8 @@ void displayCsvRow(const Shutter shutter) {
 }
 
 void displayCsvTable() {
-    const int shuttersCount = static_cast<int>(shutters.size());
-    const int middle = shuttersCount / 2;
+    constexpr int shuttersCount = static_cast<int>(shutters.size());
+    constexpr int middle = shuttersCount / 2;
 
     for (int i=0; i<shuttersCount; i++) {
         if ( (i%middle) == 0) {
